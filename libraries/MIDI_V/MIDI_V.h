@@ -33,6 +33,8 @@ class MidiV
 	void midiRead();
 	boolean isReadCC();
 	boolean isReadPC();
+	void sendCC(unsigned inProgramNumber,unsigned inControlValue,unsigned inChannel);
+	void sendPC(unsigned inProgramNumber,unsigned inChannel);
 };
 
 #endif

@@ -96,4 +96,10 @@ boolean MidiV::isReadPC(){
 	return _isReadPC;
 }
 
+void MidiV::sendPC(unsigned inProgramNumber,unsigned inChannel){
+	MIDI.sendProgramChange(inProgramNumber,inChannel);
+}
+void MidiV::sendCC(unsigned inControlNumber,unsigned inControlValue,unsigned inChannel){
+	MIDI.sendControlChange(inControlNumber,inControlValue,inChannel);
+}
 

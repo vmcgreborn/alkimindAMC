@@ -44,7 +44,7 @@ class ServoV
 	//obtiene el nombre de la posicion del switch
 	String getSwitchPositionName(int chanel,int pos);
   private:
-	int getServoI2cInDegress(int degress,int calPos);
+	int getServoI2cInDegress(int degress);
 	void standbyOn(boolean on);
 	void powerOn(boolean on);
 };

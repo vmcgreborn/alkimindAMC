@@ -8,22 +8,22 @@
 #include "SERVO_V.h"
 #include "Servo.h"
 #include <Adafruit_PWMServoDriver.h>
-
-
+/*
+#include <Wire.h>
+#include "PCA9685.h"
+*/
 #define CHAKE_MOV 10
 #define CHAKE_DELAY 100
 #define SERVO_DELAY 100
 #define SB_DELAY 60000
 #define MAX_ROTATION 270
-#define SERVO_MAX_ROTATION 145
 #define MID_ROTATION MAX_ROTATION/2
-#define SERVO_MID_ROTATION SERVO_MAX_ROTATION/2
 //TODO determinar posiciones
 #define POWER_ON_POS 30
 #define POWER_OFF_POS 60
 #define SB_ON_POS 30
 #define SB_OFF_POS 60
-
+#define PWM_FREQ 50
 
 #define GAIN_OUTPUT_NUMBER 0
 #define VOLUMEN_OUTPUT_NUMBER 5
@@ -32,33 +32,20 @@
 #define CHANEL_CLEAN 0
 #define CHANEL_DISTOR 1
 #define DUAL_POTS_NUMBER 7
+#define I2C_MAX_RES 4096
 const int CHANEL_MODE_POSITION[] = { 20, 60, 120 }; //TODO determinar el valor
-const int SERVO_I2C_CALIBRATION[][2]={
 
-		//chanell 1
-		{172,565},{172,565},//gain
-		{172,565},{172,565},//mid
-		{172,565},{172,565},//master
-		{172,565},{172,565},//treble
-		{172,565},{172,565},//bass
-		{172,565},{172,565},//presence
-		{172,565},{172,565},//Reverb
-		{172,565},{172,565},//chanel1,chanel2
-		//apartir de aqui entra en el siguiente i2c
-		//pos16
-		//chanel 2
-		{172,565},{172,565},//gain
-		{172,565},{172,565},//mid
-		{172,565},{172,565},//master
-		{172,565},{172,565},//treble
-		{172,565},{172,565},//bass
-		{172,565},{172,565},//presence
-		{172,565},{172,565},//Reverb
-		{172,565},{172,565},//on,standby
-};
-
-Adafruit_PWMServoDriver servosDriver1 = Adafruit_PWMServoDriver(0x40);
-Adafruit_PWMServoDriver servosDriver2 = Adafruit_PWMServoDriver(0x44);
+const float SERVO_I2C_CALIBRATION_CONST=(PWM_FREQ/100)*I2C_MAX_RES;
+const float SERVO_MS_MIN_SPEC=.5;//500us
+const float SERVO_MS_MAX_SPEC=2.5;//2500us
+const int SERVO_I2C_CALIBRATION[2]={static_cast<int>(SERVO_I2C_CALIBRATION_CONST*SERVO_MS_MIN_SPEC),static_cast<int>(SERVO_I2C_CALIBRATION_CONST*SERVO_MS_MAX_SPEC)};//106,622
+//const int SERVO_I2C_CALIBRATION[2]={106,622};
+Adafruit_PWMServoDriver servosDriver1 ;
+Adafruit_PWMServoDriver servosDriver2 ;
+/*
+PCA9685 pwmController;
+PCA9685 pwmController2;
+*/
 ServoV::ServoV() {
 
 }
@@ -71,10 +58,26 @@ ServoV::ServoV(String _servoNames[], String _chanelModes[][3], int chanels,
 void ServoV::begin(uint8_t addr[2]) {
 	servosDriver1 = Adafruit_PWMServoDriver(addr[0]);
 	servosDriver1.begin();
-	servosDriver1.setPWMFreq(60);//60
+	servosDriver1.setPWMFreq(PWM_FREQ);//60
 	servosDriver2 = Adafruit_PWMServoDriver(addr[1]);
 	servosDriver2.begin();
-	servosDriver2.setPWMFreq(60);
+	servosDriver2.setPWMFreq(PWM_FREQ);
+/*
+
+	 Wire.begin();                       // Wire must be started first
+	 Wire.setClock(400000);              // Supported baud rates are 100kHz, 400kHz, and 1000kHz
+
+	 pwmController.resetDevices();       // Software resets all PCA9685 devices on Wire line
+
+	 pwmController.init(B000000);        // Address pins A5-A0 set to B000000
+	 pwmController.setPWMFrequency(PWM_FREQ);
+
+	 pwmController2.resetDevices();       // Software resets all PCA9685 devices on Wire line
+
+	 pwmController2.init(B000001);
+	 pwmController2.setPWMFrequency(PWM_FREQ);
+
+*/
 }
 //aplica el ciclo de encendido
 
@@ -105,7 +108,8 @@ void ServoV::standbyOn(boolean on){
 	}else{
 		pos=SB_OFF_POS;
 	}
-	servosDriver2.setPWM(15,0,getServoI2cInDegress(pos,31));
+	servosDriver2.setPWM(1,0,getServoI2cInDegress(pos));
+	//pwmController2.setChannelPWM(1,getServoI2cInDegress(pos));
 }
 void ServoV::powerOn(boolean on){
 	int pos;
@@ -114,7 +118,8 @@ void ServoV::powerOn(boolean on){
 	}else{
 		pos=POWER_OFF_POS;
 	}
-	servosDriver2.setPWM(14,0,getServoI2cInDegress(pos,30));
+	servosDriver2.setPWM(0,0,getServoI2cInDegress(pos));
+	//pwmController2.setChannelPWM(0,getServoI2cInDegress(pos));
 }
 void ServoV::offSafeCicle() {
 	//SAFE LEVEL CICLE
@@ -145,49 +150,25 @@ void ServoV::loadAllPositions(int potValList[],int switchPosValue, int chanel) {
 }
 //move pot number in position degrees
 void ServoV::loadPotDegrees(int number, int chanel, int degrees) {
-	int out2 = 0;
-	int out1 = 0;
-	int i2cPos=0;
-
-	int startRotationServo1=(MAX_ROTATION-SERVO_MAX_ROTATION)/2;//62
-	int endRotationServo1=startRotationServo1+SERVO_MAX_ROTATION;//207
-
-	if (degrees > startRotationServo1&& degrees < endRotationServo1) {
-			out1 = degrees - startRotationServo1;
-			out2 = SERVO_MID_ROTATION;
-	} else {
-		if (degrees <= startRotationServo1) {
-				out1 = 0;
-				out2 = degrees +SERVO_MID_ROTATION -  startRotationServo1;//28 a 90
-		} else {
-				out1 = SERVO_MAX_ROTATION;
-				out2 = degrees + SERVO_MID_ROTATION -endRotationServo1;//90 a 118
-		}
-	}
-
-	 i2cPos=number*2;
-
-		if(chanel==0){
-			servosDriver1.setPWM(i2cPos,0,getServoI2cInDegress(out1,i2cPos));
-			servosDriver1.setPWM(i2cPos+1,0,getServoI2cInDegress(out2,i2cPos+1));
-		}
-
-		if(chanel==1){
-			servosDriver2.setPWM(i2cPos,0,getServoI2cInDegress(out1,i2cPos+16));
-			servosDriver2.setPWM(i2cPos+1,0,getServoI2cInDegress(out2,i2cPos+17));
-		}
+		servosDriver1.setPWM(number+(chanel*7),0,getServoI2cInDegress(degrees));
+		//pwmController.setChannelPWM(number+(chanel*7),getServoI2cInDegress(degrees));
 }
 //move switch number in postion number
 void ServoV::loadSwitchPosition(int chanel, int position) {
 	servosDriver1.setPWM(
 						chanel+14,
 						0,
-						getServoI2cInDegress(CHANEL_MODE_POSITION[position],chanel+14)
+						getServoI2cInDegress(CHANEL_MODE_POSITION[position])
 						);
+	/*
+
+	pwmController.setChannelPWM(
+			chanel+14,
+			getServoI2cInDegress(CHANEL_MODE_POSITION[position]));*/
 }
 //chake pot number
 void ServoV::chakePot(int number, int chanel, int actalPos) {
-	int tempPos = actalPos;
+	/*int tempPos = actalPos;
 
 	if (actalPos < CHAKE_MOV) {
 		tempPos = CHAKE_MOV;
@@ -201,6 +182,7 @@ void ServoV::chakePot(int number, int chanel, int actalPos) {
 	loadPotDegrees(number, chanel, tempPos + CHAKE_MOV);
 	delay(CHAKE_DELAY);
 	loadPotDegrees(number, chanel, actalPos + CHAKE_MOV);
+	*/
 }
 //obtiene el nombre del pot
 String ServoV::getPotName(int number) {
@@ -214,7 +196,7 @@ String ServoV::getSwitchPositionName(int chanel, int pos) {
 /**
  * obtiene el valor para el i2c de grados
  */
-int ServoV::getServoI2cInDegress(int degress,int calPos){
-	return map(degress,0,180,SERVO_I2C_CALIBRATION[calPos][0],SERVO_I2C_CALIBRATION[calPos][1]);
+int ServoV::getServoI2cInDegress(int degress){
+	return map(degress,0,MAX_ROTATION,SERVO_I2C_CALIBRATION[0],SERVO_I2C_CALIBRATION[1]);
 }
 
